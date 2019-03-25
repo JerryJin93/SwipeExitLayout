@@ -4,7 +4,6 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
 import android.content.res.TypedArray;
-import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
@@ -20,6 +19,7 @@ import android.widget.Scroller;
 
 import com.jerryjin.lib.R;
 
+import androidx.annotation.FloatRange;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -30,31 +30,31 @@ import androidx.annotation.Nullable;
  * GitHub: https://github.com/JerryJin93
  * Blog:
  * WeChat: enGrave93
- * Version: 0.0.1
+ * Version: 1.0.0
  * Description:
  */
-@SuppressWarnings("FieldCanBeLocal")
 public class SwipeExitLayout extends FrameLayout {
 
     private static final String TAG = SwipeExitLayout.class.getSimpleName();
     private static final float THRESHOLD_SCALE_FLOOR = 0.4f;
+    private static final float DEFAULT_FINISH_OFFSET_THRESHOLD = 200;
     private static int screenHeight;
-    public boolean allowExit = true;
+
     private boolean lockAndLoad;
+    private boolean allowExit = true;
+    private float mStartEvacuationOffset;
     private Activity mContext;
     private View decor;
-    private View originDecorChild;
     private Drawable originDecorBackground;
+    private int mBackgroundColor;
     private float downX, downY;
     private float lastX, lastY;
     private View mContent;
     private View onlyChild;
     private Scroller mScroller;
     private int mTouchSlop;
-    private VelocityTracker tracker;
-    private boolean timeToFinish;
-    private boolean lock;
-    private Rect originArea;
+    private VelocityTracker mTracker;
+    private OnExitListener mOnExitListener;
 
     public SwipeExitLayout(@NonNull Context context) {
         this(context, null);
@@ -69,17 +69,27 @@ public class SwipeExitLayout extends FrameLayout {
         init(context);
     }
 
+    /**
+     * Initialization.
+     *
+     * @param context The context of current layout.
+     */
     private void init(Context context) {
         mScroller = new Scroller(context);
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
-        tracker = VelocityTracker.obtain();
+        mTracker = VelocityTracker.obtain();
         DisplayMetrics dm = new DisplayMetrics();
         WindowManager manager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
         manager.getDefaultDisplay().getMetrics(dm);
         screenHeight = dm.heightPixels;
     }
 
-    public void attachTo(Activity activity) {
+    /**
+     * Attach to a specific Activity.
+     *
+     * @param activity The specified Activity.
+     */
+    public final void attachTo(Activity activity) {
         mContext = activity;
         // set the background of ActionBar to window background.
         TypedArray ta = mContext.getTheme().obtainStyledAttributes(new int[]{android.R.attr.windowBackground});
@@ -96,7 +106,6 @@ public class SwipeExitLayout extends FrameLayout {
         Log.e(TAG, "has " + childCount + (childCount > 1 ? " children" : " child") + ".");
         ViewGroup decorChild = (ViewGroup) decorView.getChildAt(0);
 
-        originDecorChild = decorChild;
         originDecorBackground = decorChild.getBackground();
 
         decorChild.setBackgroundResource(background);
@@ -108,33 +117,58 @@ public class SwipeExitLayout extends FrameLayout {
         mContent = this;
     }
 
+    /**
+     * Detach from the current Activity.
+     */
+    public final void detach() {
+        ((ViewGroup) decor).removeViewAt(0);
+        removeViewAt(0);
+        onlyChild.setBackground(originDecorBackground);
+        ((ViewGroup) decor).addView(onlyChild);
+    }
 
+
+    /**
+     * Set the child of the attached Activity's decor view the field.
+     * @param decorChild The child of the attached Activity's decor view.
+     */
     private void setContentView(View decorChild) {
         onlyChild = decorChild;
     }
 
-    private void startEvacuation(MotionEvent event) {
+    /**
+     * Start the exit animation.
+     */
+    private void startEvacuation() {
         // 跟随手指移动offset进行位移
-        Log.e(TAG, "getX: " + event.getX() + " downX: " + downX + " getY: " + event.getY() + " downY: " + downY);
-        Log.e(TAG, "x: " + (int) -(event.getX() - downX) + " y: " + (int) -(event.getY() - downY));
+        Log.e(TAG, "getX: " + lastX + " downX: " + downX + " getY: " + lastY + " downY: " + downY);
+        Log.e(TAG, "x: " + (int) -(lastX - downX) + " y: " + (int) -(lastY - downY));
         // - -> in + -> out
-        scrollTo((int) -(event.getX() - downX), (int) -(event.getY() - downY));
-        float scale = (screenHeight - event.getY()) / screenHeight;
+        scrollTo((int) -(lastX - downX), (int) -(lastY - downY));
+
+        float scale = (screenHeight - lastY) / screenHeight;
         Log.e(TAG, "scale: " + scale);
         // down↓ scale↓ -> event.getY()↑ scale↓
 
         float finalScale =
                 scale > 0 && scale >= THRESHOLD_SCALE_FLOOR ? scale : THRESHOLD_SCALE_FLOOR;
-        setBackgroundColor(0x33000000);
+
+        computeAlpha(scale);
+        setBackgroundColor(mBackgroundColor);
+
+        //setBackgroundColor(0x33000000);
         onlyChild.setScaleX(finalScale);
         onlyChild.setScaleY(finalScale);
 
         Log.e(TAG, "l, t, r, b: " + getLeft() + ", " + getTop() + ", " + getRight() + ", " + getBottom());
 
-        timeToFinish = lastY > screenHeight * 2f / 3;
+        mStartEvacuationOffset = mStartEvacuationOffset == 0 ? DEFAULT_FINISH_OFFSET_THRESHOLD : mStartEvacuationOffset;
         // postInvalidate();
     }
 
+    /**
+     * Restore to origin.
+     */
     private void requestRestoreToFirst() {
         Log.e(TAG, "restoring");
         mScroller.startScroll(mContent.getScrollX(), mContent.getScrollY(),
@@ -145,10 +179,11 @@ public class SwipeExitLayout extends FrameLayout {
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
-        tracker.clear();
-        tracker.addMovement(ev);
-        tracker.computeCurrentVelocity(1000);
-        lockAndLoad = tracker.getYVelocity() > 0;
+        mTracker.clear();
+        mTracker.addMovement(ev);
+        mTracker.computeCurrentVelocity(1000);
+        lockAndLoad = mTracker.getYVelocity() > 0;
+        Log.e(TAG, "yVelocity: " + mTracker.getYVelocity() + " pixels per second.");
         switch (ev.getAction()) {
             case MotionEvent.ACTION_DOWN:
                 downX = ev.getRawX();
@@ -170,20 +205,25 @@ public class SwipeExitLayout extends FrameLayout {
             case MotionEvent.ACTION_DOWN:
                 downX = event.getX();
                 downY = event.getY();
-                if (!lock) {
-                    originArea = new Rect(getLeft(), getTop(), getRight(), getBottom());
-                    lock = true;
-                }
                 break;
             case MotionEvent.ACTION_MOVE:
                 lastX = event.getX();
                 lastY = event.getY();
                 if (lockAndLoad) {
-                    startEvacuation(event);
+                    startEvacuation();
+                    if (mOnExitListener != null) {
+                        mOnExitListener.onStart();
+                    }
                 }
                 break;
             case MotionEvent.ACTION_UP:
+                boolean timeToFinish = event.getY() - downY > mStartEvacuationOffset;
                 if (timeToFinish) {
+                    if (mOnExitListener != null) {
+                        mOnExitListener.onPreFinish();
+                    }
+                    // TODO: 2019/3/25 Animation
+                    // setBackgroundColor(Color.TRANSPARENT);
                     mContext.finish();
                     mContext.overridePendingTransition(R.anim.fade_in, R.anim.fade_out);
                 } else {
@@ -203,14 +243,117 @@ public class SwipeExitLayout extends FrameLayout {
         }
     }
 
-    private Rect getRect(MotionEvent event, float scale) {
-        Rect rect = new Rect();
-        return rect;
-    }
-
+    /**
+     * To determine the gesture of current user has met the requirement of executing the exit animation.
+     *
+     * @param event The current MotionEvent object.
+     * @return True if the gesture is correct, false otherwise.
+     */
     private boolean validateGesture(MotionEvent event) {
         return event.getRawX() - downX >= mTouchSlop || event.getRawY() - downY >= mTouchSlop;
     }
 
     // TODO: 2019/3/18  跟手優化
+
+    /**
+     * Register a callback to be invoked when starts exit animation.
+     *
+     * @param listener The callback that will run.
+     */
+    public void setOnExitListener(OnExitListener listener) {
+        mOnExitListener = listener;
+    }
+
+    /**
+     * Reset the background color to pure black.
+     */
+    private void resetBackgroundColor() {
+        mBackgroundColor = 0x00000000;
+    }
+
+    /**
+     * Update the alpha value.
+     *
+     * @param alpha The newest alpha value.
+     */
+    private void computeAlpha(@FloatRange(from = 0.0, to = 1.0) float alpha) {
+        resetBackgroundColor();
+        mBackgroundColor |= (int) (alpha * 255.0f + 0.5f) << 24;
+    }
+
+    /**
+     * Get the alpha value of the background color.
+     *
+     * @return The current alpha value.
+     */
+    public int getBackgroundAlpha() {
+        return mBackgroundColor & 0xff000000;
+    }
+
+    /**
+     * Get the distance between the y value of finger-down point and the finger-up point.
+     *
+     * @return The distance that developer set.
+     */
+    public float getStartEvacuationOffset() {
+        return mStartEvacuationOffset;
+    }
+
+    /**
+     * Tell me when to start to evaluate.
+     *
+     * @param offsetFromDownY The distance between the y value of finger-down point and the finger-up point.
+     */
+    public void setStartEvacuationOffset(float offsetFromDownY) {
+        mStartEvacuationOffset = offsetFromDownY;
+    }
+
+    /**
+     * Set the flag that whether intercept the touch event or not.
+     *
+     * @param allowExit True if not to intercept, false otherwise.
+     */
+    public void allowExit(boolean allowExit) {
+        this.allowExit = allowExit;
+    }
+
+    /**
+     * Get to know whether this layout will intercept touch event or not.
+     *
+     * @return True if not to intercept, false otherwise.
+     */
+    public boolean isExitPermitted() {
+        return allowExit;
+    }
+
+    /**
+     * An exposed interface for doing something either after the beginning of the exit animation
+     * or before finishing the attached Activity.
+     */
+    interface OnExitListener {
+        /***
+         * Callback that will be invoked after the beginning of the exit animation.
+         */
+        void onStart();
+
+        /**
+         * Callback that will be invoked before finishing the attached Activity.
+         */
+        void onPreFinish();
+    }
+
+    /**
+     * Implementation for OnExitListener.
+     */
+    public static abstract class OnExitListenerImpl implements OnExitListener {
+        @Override
+        public void onStart() {
+
+        }
+
+        @Override
+        public void onPreFinish() {
+
+        }
+    }
 }
