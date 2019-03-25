@@ -31,7 +31,7 @@ import androidx.annotation.Nullable;
  * Blog:
  * WeChat: enGrave93
  * Version: 1.0.0
- * Description:
+ * Description: Swipe down to exit.
  */
 public class SwipeExitLayout extends FrameLayout {
 
