@@ -19,7 +19,7 @@
 
 ```
 	dependencies {
-	        implementation 'com.github.JerryJin93:SwipeExitLayout:1.0.1'
+	        implementation 'com.github.JerryJin93:SwipeExitLayout:1.0.2'
 	}
 ```
 
