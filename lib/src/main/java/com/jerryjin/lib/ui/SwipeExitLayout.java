@@ -30,7 +30,7 @@ import androidx.annotation.Nullable;
  * GitHub: https://github.com/JerryJin93
  * Blog:
  * WeChat: enGrave93
- * Version: 1.0.0
+ * Version: 1.0.1
  * Description: Swipe down to exit.
  */
 public class SwipeExitLayout extends FrameLayout {
@@ -40,17 +40,21 @@ public class SwipeExitLayout extends FrameLayout {
     private static final float DEFAULT_FINISH_OFFSET_THRESHOLD = 200;
     private static int screenHeight;
 
-    private boolean lockAndLoad;
-    private boolean allowExit = true;
-    private float mStartEvacuationOffset;
     private Activity mContext;
+    private View mContent;
+    private View onlyChild;
     private View decor;
     private Drawable originDecorBackground;
+
+    private boolean lockAndLoad;
+    private boolean allowExit = true;
+    private boolean onStartLock;
+    private float mStartEvacuationOffset;
+
     private int mBackgroundColor;
     private float downX, downY;
     private float lastX, lastY;
-    private View mContent;
-    private View onlyChild;
+
     private Scroller mScroller;
     private int mTouchSlop;
     private VelocityTracker mTracker;
@@ -130,6 +134,7 @@ public class SwipeExitLayout extends FrameLayout {
 
     /**
      * Set the child of the attached Activity's decor view the field.
+     *
      * @param decorChild The child of the attached Activity's decor view.
      */
     private void setContentView(View decorChild) {
@@ -150,11 +155,13 @@ public class SwipeExitLayout extends FrameLayout {
         Log.e(TAG, "scale: " + scale);
         // down↓ scale↓ -> event.getY()↑ scale↓
 
-        float finalScale =
-                scale > 0 && scale >= THRESHOLD_SCALE_FLOOR ? scale : THRESHOLD_SCALE_FLOOR;
+        float finalScale = scale >= THRESHOLD_SCALE_FLOOR ? scale : THRESHOLD_SCALE_FLOOR;
 
         computeAlpha(scale);
         setBackgroundColor(mBackgroundColor);
+        if (mOnExitListener != null) {
+            mOnExitListener.onExit(mBackgroundColor);
+        }
 
         //setBackgroundColor(0x33000000);
         onlyChild.setScaleX(finalScale);
@@ -175,6 +182,8 @@ public class SwipeExitLayout extends FrameLayout {
                 -mContent.getScrollX(), -mContent.getScrollY());
         onlyChild.setScaleX(1);
         onlyChild.setScaleY(1);
+        // temporary solution for restoring position.
+        scrollTo(0, 0);
     }
 
     @Override
@@ -211,8 +220,9 @@ public class SwipeExitLayout extends FrameLayout {
                 lastY = event.getY();
                 if (lockAndLoad) {
                     startEvacuation();
-                    if (mOnExitListener != null) {
+                    if (mOnExitListener != null && !onStartLock) {
                         mOnExitListener.onStart();
+                        onStartLock = true;
                     }
                 }
                 break;
@@ -228,6 +238,10 @@ public class SwipeExitLayout extends FrameLayout {
                     mContext.overridePendingTransition(R.anim.fade_in, R.anim.fade_out);
                 } else {
                     requestRestoreToFirst();
+                    if (mOnExitListener != null) {
+                        mOnExitListener.onRestore();
+                        onStartLock = false;
+                    }
                 }
                 break;
         }
@@ -278,7 +292,7 @@ public class SwipeExitLayout extends FrameLayout {
      */
     private void computeAlpha(@FloatRange(from = 0.0, to = 1.0) float alpha) {
         resetBackgroundColor();
-        mBackgroundColor |= (int) (alpha * 255.0f + 0.5f) << 24;
+        mBackgroundColor |= (int) ((alpha >= 0 ? alpha : 0) * 255.0f + 0.5f) << 24;
     }
 
     /**
@@ -330,16 +344,28 @@ public class SwipeExitLayout extends FrameLayout {
      * An exposed interface for doing something either after the beginning of the exit animation
      * or before finishing the attached Activity.
      */
-    interface OnExitListener {
-        /***
+    public interface OnExitListener {
+        /**
          * Callback that will be invoked after the beginning of the exit animation.
          */
         void onStart();
 
         /**
+         * Callback that will be invoked during the exit animation.
+         *
+         * @param backgroundColor The background color of root view of the attached Activity.
+         */
+        void onExit(int backgroundColor);
+
+        /**
          * Callback that will be invoked before finishing the attached Activity.
          */
         void onPreFinish();
+
+        /**
+         * Callback that will be invoked when restore to the primitive status.
+         */
+        void onRestore();
     }
 
     /**
@@ -352,7 +378,17 @@ public class SwipeExitLayout extends FrameLayout {
         }
 
         @Override
+        public void onExit(int backgroundColor) {
+
+        }
+
+        @Override
         public void onPreFinish() {
+
+        }
+
+        @Override
+        public void onRestore() {
 
         }
     }

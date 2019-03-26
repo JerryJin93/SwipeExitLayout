@@ -1,5 +1,7 @@
 # SwipeExitLayout
 
+### This project is completely based on androidX.
+
 ## How to use
 
 ### Step 1: Add it in your root build.gradle at the end of repositories.
@@ -17,12 +19,12 @@
 
 ```
 	dependencies {
-	        implementation 'com.github.JerryJin93:SwipeExitLayout:1.0.0'
+	        implementation 'com.github.JerryJin93:SwipeExitLayout:1.0.1'
 	}
 ```
 
 ### Step3:
-Just extend to the SwipeExitActivity.
+1. Just extend to the SwipeExitActivity.
 ```
     public class XxxActivity extends SwipeExitActivity {
         @Override
@@ -30,5 +32,46 @@ Just extend to the SwipeExitActivity.
                 super.onCreate(savedInstanceState);
                 setContentView(R.layout.activity_main);
             }
+    }
+```
+
+2. Use SwipeExitLayout in a specific class.
+```
+    public abstract class XxxActivity extends AppCompatActivity {
+    
+        private SwipeExitLayout root;
+    
+        @SuppressLint("InflateParams")
+        @Override
+        protected void onCreate(@Nullable Bundle savedInstanceState) {
+            super.onCreate(savedInstanceState);
+            // Call before setContentView(R.layout.xxx);
+            root = (SwipeExitLayout) LayoutInflater.from(this).inflate(R.layout.swipe_exit_container, null);
+            root.attachTo(this);
+            setContentView(R.layout.activity_xxx);
+            
+            root.setOnExitListener(new SwipeExitLayout.OnExitListenerImpl() {
+                        @Override
+                        public void onStart() {
+                            super.onStart();
+                        }
+            
+                        @Override
+                        public void onExit(int backgroundColor) {
+                            super.onExit(backgroundColor);
+                        }
+            
+                        @Override
+                        public void onPreFinish() {
+                            super.onPreFinish();
+                        }
+            
+                        @Override
+                        public void onRestore() {
+                            super.onRestore();
+                        }
+                    });
+        }
+    
     }
 ```
