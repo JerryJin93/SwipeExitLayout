@@ -14,7 +14,7 @@ import androidx.appcompat.app.AppCompatActivity;
  * GitHub: https://github.com/JerryJin93
  * Blog:
  * WeChat: enGrave93
- * Version: 1.0.1
+ * Version: 1.0.2
  * Description:
  */
 @SuppressLint("Registered")

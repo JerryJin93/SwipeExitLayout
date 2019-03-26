@@ -30,7 +30,7 @@ import androidx.annotation.Nullable;
  * GitHub: https://github.com/JerryJin93
  * Blog:
  * WeChat: enGrave93
- * Version: 1.0.1
+ * Version: 1.0.2
  * Description: Swipe down to exit.
  */
 public class SwipeExitLayout extends FrameLayout {
