@@ -35,9 +35,9 @@
     }
 ```
 
-2. Use SwipeExitLayout in a specific class.
+2. Or to use SwipeExitLayout in a specific class.
 ```
-    public abstract class XxxActivity extends AppCompatActivity {
+    public class XxxActivity extends AppCompatActivity {
     
         private SwipeExitLayout root;
     
